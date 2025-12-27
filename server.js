@@ -11,9 +11,10 @@ const PORT = process.env.PORT || 3001;
 // CORS Configuration - Only allow requests from your website
 const corsOptions = {
   origin: [
-    'https://www.confidentialpenpal.com',
-    'https://confidentialpenpal.com',
-    'http://localhost:3000' // For local development
+    'https://www.satsofbitcoin.com',
+    'https://satsofbitcoin.com',
+    'https://satsofbitcoin-frontend.vercel.app',
+    'http://localhost:3000'
   ],
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type']
@@ -97,7 +98,24 @@ app.post('/api/ask', scribeLimiter, async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error. Please try again later.' });
   }
 });
-
+// Endpoint to get Bitcoin market data
+app.get('/api/market-data', async (req, res) => {
+  try {
+    const coinGeckoResponse = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_market_cap=true&include_24hr_change=true&include_last_updated_at=true`,
+      {
+        headers: {
+          'x-cg-demo-api-key': process.env.COINGECKO_API_KEY,
+        },
+      }
+    );
+    const data = await coinGeckoResponse.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error calling CoinGecko API:', error);
+    res.status(500).json({ error: 'Failed to fetch market data.' });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Anonymous Scribe server is running on port ${PORT}`);
 });
