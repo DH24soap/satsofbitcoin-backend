@@ -1,20 +1,61 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// CORS Configuration - Only allow requests from your website
+const corsOptions = {
+  origin: [
+    'https://www.satsofbitcoin.com',
+    'https://satsofbitcoin.com',
+    'http://localhost:3000' // For local development
+  ],
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type']
+};
+app.use(cors(corsOptions));
+
+// Parse JSON request bodies
 app.use(express.json());
 
+// Rate Limiting - Prevent abuse
+// General limiter for all routes
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per 15 minutes per IP
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+// Stricter limiter for the AI endpoint (more expensive)
+const askLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 AI requests per 15 minutes per IP
+  message: { error: 'Too many questions asked. Please wait a few minutes before asking more.' }
+});
+
+// Apply general rate limiting to all routes
+app.use(generalLimiter);
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Endpoint to chat with Venice AI
-app.post('/api/ask', async (req, res) => {
+app.post('/api/ask', askLimiter, async (req, res) => {
   const { prompt } = req.body;
 
-  if (!prompt) {
-    return res.status(400).json({ error: 'Prompt is required' });
+  // Input validation
+  if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+    return res.status(400).json({ error: 'A valid prompt is required.' });
+  }
+
+  if (prompt.length > 1000) {
+    return res.status(400).json({ error: 'Prompt is too long. Please keep it under 1000 characters.' });
   }
 
   try {
@@ -33,7 +74,7 @@ app.post('/api/ask', async (req, res) => {
           },
           {
             role: 'user',
-            content: prompt
+            content: prompt.trim()
           }
         ],
         max_tokens: 500,
@@ -41,20 +82,18 @@ app.post('/api/ask', async (req, res) => {
     });
 
     const data = await veniceResponse.json();
-    
-    console.log('Venice API Response:', JSON.stringify(data, null, 2));
 
     if (data.choices && data.choices.length > 0) {
       res.json({ answer: data.choices[0].message.content.trim() });
     } else if (data.error) {
       console.error('Venice API Error:', data.error);
-      res.status(500).json({ error: data.error.message || 'Failed to get a response from the AI' });
+      res.status(500).json({ error: 'Failed to get a response from the AI. Please try again.' });
     } else {
-      res.status(500).json({ error: 'Failed to get a response from the AI' });
+      res.status(500).json({ error: 'Failed to get a response from the AI.' });
     }
   } catch (error) {
     console.error('Error calling Venice API:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ error: 'Internal Server Error. Please try again later.' });
   }
 });
 
@@ -73,7 +112,7 @@ app.get('/api/market-data', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('Error calling CoinGecko API:', error);
-    res.status(500).json({ error: 'Failed to fetch market data' });
+    res.status(500).json({ error: 'Failed to fetch market data.' });
   }
 });
 
