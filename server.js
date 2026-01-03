@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const rateLimit = require('express-rate-limit');
-const axios = require('axios'); // <-- ADDED: Require axios for the new endpoint
+const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
@@ -115,42 +115,52 @@ app.get('/api/market-data', async (req, res) => {
 });
 
 // =================================================================
-// --- NEW ENDPOINT FOR THE ASSET CALCULATOR ---
+// --- UPDATED ENDPOINT FOR THE ASSET CALCULATOR ---
 // =================================================================
 app.get('/api/asset-prices', async (req, res) => {
   try {
-    const apiKey = process.env.TWELVEDATA_API_KEY;
+    const twelveDataKey = process.env.TWELVEDATA_API_KEY;
+    const fcsApiKey = process.env.FCSAPI_API_KEY;
 
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Twelve Data API key is not configured on the server.' });
+    if (!twelveDataKey || !fcsApiKey) {
+      return res.status(500).json({ error: 'API keys are not configured on the server.' });
     }
 
-    // Twelve Data allows you to fetch multiple symbols in one request
-    const symbols = 'BTC/USD,XAU/USD,XAG/USD'; // Bitcoin, Gold, Silver
-    const apiUrl = `https://api.twelvedata.com/price?symbol=${symbols}&apikey=${apiKey}`;
+    // 1. Fetch Bitcoin and Gold from Twelve Data
+    const twelveDataSymbols = 'BTC/USD,XAU/USD';
+    const twelveDataUrl = `https://api.twelvedata.com/price?symbol=${twelveDataSymbols}&apikey=${twelveDataKey}`;
+    const twelveResponse = await axios.get(twelveDataUrl);
+    const twelveData = twelveResponse.data;
 
-    console.log(`Fetching asset prices from Twelve Data...`);
-    const response = await axios.get(apiUrl);
-
-    // The response from Twelve Data is an object with symbols as keys
-    const data = response.data;
-
-    // Check for any errors in the API response
-    if (data.status && data.status === 'error') {
-        console.error('Twelve Data API Error:', data.message);
+    if (twelveData.status && twelveData.status === 'error') {
+        console.error('Twelve Data API Error:', twelveData.message);
         return res.status(500).json({ error: 'Failed to fetch data from Twelve Data.' });
     }
 
-    // Construct a clean, predictable response for our frontend
+    // 2. Fetch Silver from FCSAPI
+    const fcsUrl = `https://fcsapi.com/api-v3/forex/latest?symbol=XAGUSD&access_key=${fcsApiKey}`;
+    const fcsResponse = await axios.get(fcsUrl);
+    const fcsData = fcsResponse.data;
+
+    if (fcsData.status !== 'ok') {
+        console.error('FCSAPI Error:', fcsData);
+        // If FCSAPI fails, we can still return the other data, but silver will be null
+        console.log('FCSAPI failed, proceeding with null silver price.');
+    }
+
+    // 3. Construct a clean, predictable response for our frontend
     const prices = {
       bitcoin: {
-        usd: parseFloat(data['BTC/USD'].price),
+        usd: parseFloat(twelveData['BTC/USD'].price),
       },
       gold: {
-        price_per_ounce_usd: parseFloat(data['XAU/USD'].price),
+        price_per_ounce_usd: parseFloat(twelveData['XAU/USD'].price),
       },
       silver: {
-        price_per_ounce_usd: parseFloat(data['XAG/USD'].price),
+        // The FCSAPI response structure is different. We need to check if it was successful.
+        price_per_ounce_usd: (fcsData.status === 'ok' && fcsData.response && fcsData.response.length > 0) 
+          ? parseFloat(fcsData.response[0].price) 
+          : null,
       },
     };
 
