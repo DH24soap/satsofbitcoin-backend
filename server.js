@@ -2,10 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const rateLimit = require('express-rate-limit');
+const axios = require('axios'); // <-- ADDED: Require axios for the new endpoint
 require('dotenv').config();
 
 const app = express();
 app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3001;
 
 // CORS Configuration - Only allow requests from your website
@@ -56,7 +58,6 @@ app.post('/api/ask', askLimiter, async (req, res) => {
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
     return res.status(400).json({ error: 'A valid prompt is required.' });
   }
-
   if (prompt.length > 1000) {
     return res.status(400).json({ error: 'Prompt is too long. Please keep it under 1000 characters.' });
   }
@@ -112,6 +113,55 @@ app.get('/api/market-data', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch market data.' });
   }
 });
+
+// =================================================================
+// --- NEW ENDPOINT FOR THE ASSET CALCULATOR ---
+// =================================================================
+app.get('/api/asset-prices', async (req, res) => {
+  try {
+    const apiKey = process.env.TWELVEDATA_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Twelve Data API key is not configured on the server.' });
+    }
+
+    // Twelve Data allows you to fetch multiple symbols in one request
+    const symbols = 'BTC/USD,XAU/USD,XAG/USD'; // Bitcoin, Gold, Silver
+    const apiUrl = `https://api.twelvedata.com/price?symbol=${symbols}&apikey=${apiKey}`;
+
+    console.log(`Fetching asset prices from Twelve Data...`);
+    const response = await axios.get(apiUrl);
+
+    // The response from Twelve Data is an object with symbols as keys
+    const data = response.data;
+
+    // Check for any errors in the API response
+    if (data.status && data.status === 'error') {
+        console.error('Twelve Data API Error:', data.message);
+        return res.status(500).json({ error: 'Failed to fetch data from Twelve Data.' });
+    }
+
+    // Construct a clean, predictable response for our frontend
+    const prices = {
+      bitcoin: {
+        usd: parseFloat(data['BTC/USD'].price),
+      },
+      gold: {
+        price_per_ounce_usd: parseFloat(data['XAU/USD'].price),
+      },
+      silver: {
+        price_per_ounce_usd: parseFloat(data['XAG/USD'].price),
+      },
+    };
+
+    res.json(prices);
+
+  } catch (error) {
+    console.error('Error in /api/asset-prices:', error.message);
+    res.status(500).json({ error: 'An internal server error occurred while fetching asset prices.' });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`Satoshi Oracle server is running on port ${PORT}`);
