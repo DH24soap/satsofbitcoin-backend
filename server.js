@@ -115,8 +115,7 @@ app.get('/api/market-data', async (req, res) => {
 });
 
 // =================================================================
-// --- UPDATED ENDPOINT FOR THE ASSET CALCULATOR ---
-// =================================================================
+// --- UPDATED ENDPOINT FOR THE ASSET CALCULATOR --- // =================================================================
 app.get('/api/asset-prices', async (req, res) => {
   try {
     const twelveDataKey = process.env.TWELVEDATA_API_KEY;
