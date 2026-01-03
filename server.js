@@ -115,7 +115,8 @@ app.get('/api/market-data', async (req, res) => {
 });
 
 // =================================================================
-// --- UPDATED ENDPOINT FOR THE ASSET CALCULATOR --- // =================================================================
+// --- CORRECTED ENDPOINT FOR THE ASSET CALCULATOR ---
+// =================================================================
 app.get('/api/asset-prices', async (req, res) => {
   try {
     const twelveDataKey = process.env.TWELVEDATA_API_KEY;
@@ -137,14 +138,9 @@ app.get('/api/asset-prices', async (req, res) => {
     }
 
     // 2. Fetch Silver from FCSAPI
-const fcsUrl = `https://fcsapi.com/api-v3/forex/latest?symbol=XAG/USD&access_key=${fcsApiKey}`;    const fcsResponse = await axios.get(fcsUrl);
+    const fcsUrl = `https://fcsapi.com/api-v3/forex/latest?symbol=XAG/USD&access_key=${fcsApiKey}`;
+    const fcsResponse = await axios.get(fcsUrl);
     const fcsData = fcsResponse.data;
-
-    if (fcsData.status !== 'ok') {
-        console.error('FCSAPI Error:', fcsData);
-        // If FCSAPI fails, we can still return the other data, but silver will be null
-        console.log('FCSAPI failed, proceeding with null silver price.');
-    }
 
     // 3. Construct a clean, predictable response for our frontend
     const prices = {
@@ -155,9 +151,9 @@ const fcsUrl = `https://fcsapi.com/api-v3/forex/latest?symbol=XAG/USD&access_key
         price_per_ounce_usd: parseFloat(twelveData['XAU/USD'].price),
       },
       silver: {
-        // The FCSAPI response structure is different. We need to check if it was successful.
-        price_per_ounce_usd: (fcsData.status === 'ok' && fcsData.response && fcsData.response.length > 0) 
-          ? parseFloat(fcsData.response[0].price) 
+        // --- CORRECTED: Check for 'status: true' which indicates success from FCSAPI ---
+        price_per_ounce_usd: (fcsData.status === true && fcsData.response && fcsData.response.length > 0) 
+          ? parseFloat(fcsData.response[0].c) // --- CORRECTED: The closing price is in the 'c' field
           : null,
       },
     };
