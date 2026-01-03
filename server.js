@@ -137,8 +137,7 @@ app.get('/api/asset-prices', async (req, res) => {
     }
 
     // 2. Fetch Silver from FCSAPI
-   const fcsUrl = `https://fcsapi.com/api-v3/forex/latest?symbol=XAGUSD&access_key=${fcsApiKey}`;
-    const fcsResponse = await axios.get(fcsUrl);
+const fcsUrl = `https://fcsapi.com/api-v3/forex/latest?symbol=XAG/USD&access_key=${fcsApiKey}`;    const fcsResponse = await axios.get(fcsUrl);
     const fcsData = fcsResponse.data;
 
     if (fcsData.status !== 'ok') {
