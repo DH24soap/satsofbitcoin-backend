@@ -52,7 +52,7 @@ app.get('/api/health', (req, res) => {
 
 // Endpoint to chat with Venice AI
 app.post('/api/ask', askLimiter, async (req, res) => {
-  const { prompt } = req.body;
+  const { prompt, mode } = req.body; // <-- GET THE MODE FROM THE REQUEST
 
   // Input validation
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
@@ -60,6 +60,18 @@ app.post('/api/ask', askLimiter, async (req, res) => {
   }
   if (prompt.length > 1000) {
     return res.status(400).json({ error: 'Prompt is too long. Please keep it under 1000 characters.' });
+  }
+
+  let systemPrompt;
+  let modelToUse;
+
+  // --- DYNAMIC PROMPT AND MODEL SELECTION ---
+  if (mode === 'satoshi') {
+    systemPrompt = `You are Satoshi Nakamoto. It is the year 2011. You are answering questions about your creation, Bitcoin. You must only use knowledge, reasoning, and information that was available up to and including the year 2010. Do not mention events, technologies, or concepts that emerged after 2010, such as Ethereum, Lightning Network, major exchange collapses, or ETFs. Your tone should be that of a pragmatic, brilliant, and somewhat secretive cypherpunk. Focus on the core principles of decentralization, proof-of-work, and solving the double-spend problem.`;
+    modelToUse = 'hermes-3-llama-3.1-405b'; // Use the powerful, slower model
+  } else {
+    systemPrompt = `You are the Satoshi Oracle, an expert on Bitcoin, cryptography, and economics. You provide clear, direct, and insightful answers about Bitcoin and related topics.`;
+    modelToUse = 'llama-3.3-70b'; // Use the fast, standard model
   }
 
   try {
@@ -70,9 +82,9 @@ app.post('/api/ask', askLimiter, async (req, res) => {
         'Authorization': `Bearer ${process.env.VENICE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b',
+        model: modelToUse, // <-- USE THE DYNAMIC MODEL VARIABLE
         messages: [
-          { role: 'system', content: 'You are the Satoshi Oracle, an expert on Bitcoin, cryptography, and economics. You provide clear, direct, and insightful answers about Bitcoin and related topics.' },
+          { role: 'system', content: systemPrompt }, // <-- USE THE DYNAMIC PROMPT VARIABLE
           { role: 'user', content: prompt.trim() }
         ],
         max_tokens: 500,
@@ -94,26 +106,6 @@ app.post('/api/ask', askLimiter, async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error. Please try again later.' });
   }
 });
-
-// Endpoint to get Bitcoin market data
-app.get('/api/market-data', async (req, res) => {
-  try {
-    const coinGeckoResponse = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_market_cap=true&include_24hr_change=true&include_last_updated_at=true`,
-      {
-        headers: {
-          'x-cg-demo-api-key': process.env.COINGECKO_API_KEY,
-        },
-      }
-    );
-    const data = await coinGeckoResponse.json();
-    res.json(data);
-  } catch (error) {
-    console.error('Error calling CoinGecko API:', error);
-    res.status(500).json({ error: 'Failed to fetch market data.' });
-  }
-});
-
 // =================================================================
 // --- CORRECTED ENDPOINT FOR THE ASSET CALCULATOR ---
 // =================================================================
